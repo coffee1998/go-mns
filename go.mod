@@ -1,3 +1,3 @@
-module github.com/coffee1998/go-mns.git
+module github.com/coffee1998/go-mns
 
 go 1.15
