@@ -4,17 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
+	"github.com/coffee1998/go-mns/DB"
 	"github.com/coffee1998/go-mns/config"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"log"
 	"sync"
 	"time"
-)
-
-const (
-	DataBase = "coffee1998_mns"
-	RetryC   = "retry"
 )
 
 type Retry struct {
@@ -29,7 +25,6 @@ type Retry struct {
 
 type MNSTopic struct {
 	c        *config.MNSConfig
-	s        *mgo.Session
 	topic    ali_mns.AliMNSTopic
 	isUpdate bool
 }
@@ -47,17 +42,10 @@ func NewMNSTopic(c *config.MNSConfig) *MNSTopic {
 	if c.TopicName == "" {
 		log.Fatal("topic name is required")
 	}
-	var session *mgo.Session
-	var err error
-	if c.MongoURI != "" {
-		if session, err = mgo.Dial(c.MongoURI); err != nil {
-			log.Fatal("Failed to connection a MongoDB")
-		}
-	}
 	client := ali_mns.NewAliMNSClient(c.Endpoint, c.AccessKeyId, c.AccessKeySecret)
 	topic := ali_mns.NewMNSTopic(c.TopicName, client)
 
-	return &MNSTopic{c: c, s: session, topic: topic}
+	return &MNSTopic{c: c, topic: topic}
 }
 
 // 发送消息到主题
@@ -66,7 +54,7 @@ func (this *MNSTopic) SendMessage(messageBody bson.M) (ali_mns.MessageSendRespon
 	resp, err := this.topic.PublishMessage(ali_mns.MessagePublishRequest{MessageBody: string(data)})
 
 	if err != nil {
-		if !this.isUpdate && this.s != nil {
+		if !this.isUpdate {
 			this.Addretry(string(data))
 		}
 	}
@@ -74,36 +62,26 @@ func (this *MNSTopic) SendMessage(messageBody bson.M) (ali_mns.MessageSendRespon
 }
 
 func (this *MNSTopic) Addretry(data string) {
-	if this.s == nil {
-		return
-	}
-
-	session := this.s.Copy()
-	defer session.Close()
-
-	doc := &Retry{
-		Id:         bson.NewObjectId().Hex(),
-		RetryNum:   0,
-		IsDone:     0,
-		IsSucc:     0,
-		Data:       data,
-		TopicName:  this.c.TopicName,
-		UpdateTime: time.Now().Unix(),
-	}
-	session.DB(DataBase).C(RetryC).Insert(doc)
+	DB.Exec(this.c.MongoURI, func(collection *mgo.Collection) error {
+		doc := &Retry{
+			Id:         bson.NewObjectId().Hex(),
+			RetryNum:   0,
+			IsDone:     0,
+			IsSucc:     0,
+			Data:       data,
+			TopicName:  this.c.TopicName,
+			UpdateTime: time.Now().Unix(),
+		}
+		return collection.Insert(doc)
+	})
 }
 
 // 重试
 func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
-	if this.s == nil {
-		return
-	}
-
-	session := this.s.Copy()
-	defer session.Close()
-
 	var data []*Retry
-	session.DB(DataBase).C(RetryC).Find(bson.M{"retry_num": bson.M{"$lt": retryTimes}, "is_done": 0, "topic_name": this.c.TopicName}).All(&data)
+	DB.Exec(this.c.MongoURI, func(collection *mgo.Collection) error {
+		return collection.Find(bson.M{"retry_num": bson.M{"$lt": retryTimes}, "is_done": 0, "topic_name": this.c.TopicName}).All(&data)
+	})
 	if len(data) == 0 {
 		return
 	}
@@ -132,7 +110,9 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 					doc["is_done"] = 1
 					doc["is_succ"] = 1
 				}
-				session.DB(DataBase).C(RetryC).UpdateId(item.Id, bson.M{"$set": doc})
+				DB.Exec(this.c.MongoURI, func(collection *mgo.Collection) error {
+					return collection.UpdateId(item.Id, bson.M{"$set": doc})
+				})
 
 				//出错次数达到可重试总次数，则发送通知到指定途径
 				if err != nil && newRetryNum >= retryTimes && callback != nil {
