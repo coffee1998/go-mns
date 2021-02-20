@@ -3,8 +3,8 @@ package topic
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/coffee1998/go-mns/config"
 	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
+	"github.com/coffee1998/go-mns/config"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"log"
@@ -18,12 +18,13 @@ const (
 )
 
 type Retry struct {
-	Id          string `json:"id" bson:"_id" comment:"id"`
-	RetryNum    int    `json:"retry_num" bson:"retry_num" comment:"重试次数"`
-	IsDone      int    `json:"is_done" bson:"is_done" comment:"是否重试完毕 0：否 1：是"`
-	IsSucc      int    `json:"is_succ" bson:"is_succ" comment:"是否发送队列成功 0：否 1：是"`
-	Data        string `json:"data" bson:"data" comment:"入列数据"`
-	UpdateTime  int64  `json:"update_time" bson:"update_time" comment:"更新时间"`
+	Id         string `json:"id" bson:"_id" comment:"id"`
+	RetryNum   int    `json:"retry_num" bson:"retry_num" comment:"重试次数"`
+	IsDone     int    `json:"is_done" bson:"is_done" comment:"是否重试完毕 0：否 1：是"`
+	IsSucc     int    `json:"is_succ" bson:"is_succ" comment:"是否发送队列成功 0：否 1：是"`
+	Data       string `json:"data" bson:"data" comment:"入列数据"`
+	TopicName  string `json:"topic_name" bson:"topic_name" comment:"主题名称"`
+	UpdateTime int64  `json:"update_time" bson:"update_time" comment:"更新时间"`
 }
 
 type MNSTopic struct {
@@ -86,6 +87,7 @@ func (this *MNSTopic) Addretry(data string) {
 		IsDone:     0,
 		IsSucc:     0,
 		Data:       data,
+		TopicName:  this.c.TopicName,
 		UpdateTime: time.Now().Unix(),
 	}
 	session.DB(DataBase).C(RetryC).Insert(doc)
@@ -101,7 +103,7 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 	defer session.Close()
 
 	var data []*Retry
-	session.DB(DataBase).C(RetryC).Find(bson.M{"retry_num": bson.M{"$lt": retryTimes}, "is_done": 0}).All(&data)
+	session.DB(DataBase).C(RetryC).Find(bson.M{"retry_num": bson.M{"$lt": retryTimes}, "is_done": 0, "topic_name": this.c.TopicName}).All(&data)
 	if len(data) == 0 {
 		return
 	}
@@ -118,7 +120,7 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 				_, err := this.SendMessage(ret)
 				newRetryNum := item.RetryNum + 1
 				doc := bson.M{
-					"retry_num": newRetryNum,
+					"retry_num":   newRetryNum,
 					"update_time": time.Now().Unix(),
 				}
 				if err != nil {
