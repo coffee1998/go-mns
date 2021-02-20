@@ -128,14 +128,16 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 						doc["is_done"] = 1
 					}
 					doc["is_succ"] = 0
-					if callback != nil {
-						callback()
-					}
 				} else {
 					doc["is_done"] = 1
 					doc["is_succ"] = 1
 				}
 				session.DB(DataBase).C(RetryC).UpdateId(item.Id, bson.M{"$set": doc})
+
+				//出错次数达到可重试总次数，则发送通知到指定途径
+				if err != nil && newRetryNum >= retryTimes && callback != nil {
+					callback()
+				}
 			}
 			wg.Done()
 		}(item)
