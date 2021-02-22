@@ -86,11 +86,11 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 		return
 	}
 
-	var ret bson.M
 	wg := sync.WaitGroup{}
 	wg.Add(len(data))
 	for _, item := range data {
 		go func(item *Retry) {
+			var ret bson.M
 			this.isUpdate = true
 			if e := json.Unmarshal([]byte(item.Data), &ret); e != nil {
 				fmt.Println(e)
