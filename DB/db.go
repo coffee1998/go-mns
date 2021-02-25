@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	DataBase = "coffee1998_mns"
+	DataBase = "oam_mns"
 	RetryC   = "retry"
 )
 

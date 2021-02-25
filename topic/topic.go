@@ -6,6 +6,7 @@ import (
 	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
 	"github.com/coffee1998/go-mns/DB"
 	"github.com/coffee1998/go-mns/config"
+	"github.com/coffee1998/go-mns/crontab"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"log"
@@ -24,12 +25,13 @@ type Retry struct {
 }
 
 type MNSTopic struct {
+	NoticeFunc config.NoticeFunc
 	c        *config.MNSConfig
 	topic    ali_mns.AliMNSTopic
 	isUpdate bool
 }
 
-func NewMNSTopic(c *config.MNSConfig) *MNSTopic {
+func NewMNSTopic(c *config.MNSConfig, noticeFunc config.NoticeFunc) *MNSTopic {
 	if c.Endpoint == "" {
 		log.Fatal("endpoint is required")
 	}
@@ -45,7 +47,10 @@ func NewMNSTopic(c *config.MNSConfig) *MNSTopic {
 	client := ali_mns.NewAliMNSClient(c.Endpoint, c.AccessKeyId, c.AccessKeySecret)
 	topic := ali_mns.NewMNSTopic(c.TopicName, client)
 
-	return &MNSTopic{c: c, topic: topic}
+	mns := &MNSTopic{c: c, topic: topic, NoticeFunc: noticeFunc}
+
+	crontab.AddJob(c.RetryIntervalInSecond, c.TopicName, mns.CronRetry)
+	return mns
 }
 
 // 发送消息到主题
@@ -76,8 +81,17 @@ func (this *MNSTopic) Addretry(data string) {
 	})
 }
 
+// 定时重试
+func (this *MNSTopic) CronRetry()  {
+	times := this.c.RetryIntervalInTimes
+	if times == 0 {
+		times = config.DefaultRetryTimes
+	}
+	this.Retry(this.c.RetryIntervalInTimes, this.NoticeFunc)
+}
+
 // 重试
-func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
+func (this *MNSTopic) Retry(retryTimes int, noticeFunc config.NoticeFunc) {
 	var data []*Retry
 	DB.Exec(this.c.MongoURI, func(collection *mgo.Collection) error {
 		return collection.Find(bson.M{"retry_num": bson.M{"$lt": retryTimes}, "is_done": 0, "topic_name": this.c.TopicName}).All(&data)
@@ -115,8 +129,8 @@ func (this *MNSTopic) Retry(retryTimes int, callback func() error) {
 				})
 
 				//出错次数达到可重试总次数，则发送通知到指定途径
-				if err != nil && newRetryNum >= retryTimes && callback != nil {
-					callback()
+				if err != nil && newRetryNum >= retryTimes && noticeFunc != nil {
+					noticeFunc()
 				}
 			}
 			wg.Done()
