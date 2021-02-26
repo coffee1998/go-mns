@@ -12,7 +12,6 @@ type NoticeFunc func() error
 //:param TopicName: 队列主题名称，必填
 //:param RetryIntervalInSecond: 重试定时时间，非必填
 //:param RetryIntervalInTimes: 重试次数，非必填
-//:param MongoURI: MongoDB链接地址，如果不为空，则重试，否则不重试
 
 type MNSConfig struct {
 	Endpoint              string
@@ -21,7 +20,6 @@ type MNSConfig struct {
 	TopicName             string
 	RetryIntervalInSecond int
 	RetryIntervalInTimes  int
-	MongoURI              string
 }
 
 //:param Url: 发送钉钉消息的url地址，这里使用光环助手服务，必填
