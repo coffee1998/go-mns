@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"github.com/coffee1998/go-mns/models"
 	_ "github.com/mattn/go-sqlite3"
-	"log"
 	"time"
 )
 
@@ -28,7 +27,6 @@ func CreateTable() error {
 	}
 	defer db.Close()
 
-	log.Println("Create student table...")
 	sql := `CREATE TABLE IF NOT EXISTS ` + RetryTable + ` (
 		"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 		"retry_num" INTEGER NOT NULL DEFAULT 0,
