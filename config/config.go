@@ -2,6 +2,8 @@ package config
 
 const DefaultRetryTimes = 5
 const DefaultRetrySecond = 120
+const GoroutineCount = 100
+
 type NoticeFunc func() error
 
 //:param Endpoint: 必填
