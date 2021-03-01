@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/coffee1998/go-mns/models"
 	_ "github.com/mattn/go-sqlite3"
+	"os"
 	"time"
 )
 
@@ -17,7 +18,7 @@ func init() {
 }
 
 func GetDB() (*sql.DB, error) {
-	return sql.Open("sqlite3", DataBase)
+	return sql.Open("sqlite3", os.Getenv("GOPATH")+"/"+DataBase)
 }
 
 func CreateTable() error {
